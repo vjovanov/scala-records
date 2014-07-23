@@ -25,14 +25,14 @@ class ConversionTests extends FlatSpec with Matchers {
     val x = Rec("myObject" -> "String")
     val y = x.to[ObjectVal]
 
-    y.myObject should be("String")
+    x.myObject should be("String")
   }
 
   it should "be able to convert to narrower case classes" in {
     val x = Rec("myObject" -> "String", "foo" -> "bar")
     val y = x.to[ObjectVal]
 
-    y.myObject should be("String")
+    x.myObject should be("String")
   }
 
   it should "allow conversion if there is a `to` field" in {
