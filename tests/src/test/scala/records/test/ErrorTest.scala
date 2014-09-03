@@ -33,7 +33,7 @@ class ErrorTests extends FlatSpec with Matchers {
     val x = 1
     val b = ("foo", 4)
     typedWithMsg("""records.Rec("a" -> x, b)""",
-      "Records can only be constructed with tuples (a, b) and arrows a -> b.")
+      "Record fields can only be represented with tuples (a, b) and arrows a -> b.")
   }
 
   "Record Conversions" should "report an error if conversion to non-case class is attempted" in {
@@ -91,10 +91,10 @@ class ErrorTests extends FlatSpec with Matchers {
     case class FieldHolder(field: String)
 
     typedWithMsg("record.to",
-      "Known limitation: Converting records requires an explicit type argument to `to` method representing the target case class")
+      "Limitation: Converting records requires an explicit type argument to `to` method representing the target case class")
 
     typedWithMsg("val x: FieldHolder = record.to",
-      "Known limitation: Converting records requires an explicit type argument to `to` method representing the target case class")
+      "Limitation: Converting records requires an explicit type argument to `to` method representing the target case class")
   }
 
   import records.RecordConversions._
@@ -146,5 +146,19 @@ class ErrorTests extends FlatSpec with Matchers {
     val x = "apply"
     typedWithMsg("Rec.applyDynamic(x)()",
       "You may not invoke Rec.applyDynamic with a non-literal method name.")
+  }
+
+  it should "report an error if + is called with existing fields" in {
+    import records.Rec
+    val r = Rec(a = 1)
+    typedWithMsg("r ++ (\"a\" -> 1)",
+      "Fields [a: Int] can not be added as they already exist.")
+  }
+
+  it should "report an error if + is called with two same fields" in {
+    import records.Rec
+    val r = Rec(b = 1)
+    typedWithMsg("r ++ (\"a\" -> 1, \"a\" -> 1)",
+      "Field a is defined more than once.")
   }
 }

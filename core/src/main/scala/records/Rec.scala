@@ -35,8 +35,9 @@ object Rec extends Dynamic {
    * An extension method for converting records into case classes.
    * It is implemented as an extension to avoid collision with the record fields.
    */
-  implicit class Convert[From <: Rec](val record: From) extends AnyVal {
+  implicit class Ops[From <: Rec](val record: From) extends AnyVal {
     def to[To]: To = macro RecordConversions.to_impl[From, To]
+    def ++(fields: (String, Any)*): Any = macro RecordConversions.plus_impl[From]
   }
 }
 

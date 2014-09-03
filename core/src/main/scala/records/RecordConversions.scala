@@ -32,12 +32,16 @@ object RecordConversions {
     val (fromTpe, toTpe) = (c.weakTypeTag[From].tpe, c.weakTypeTag[To].tpe)
 
     if (toTpe.typeSymbol.asType.isAbstractType)
-      c.abort(NoPosition, s"Known limitation: Converting records requires an explicit type argument to `to` method representing the target case class")
+      c.abort(NoPosition, s"Limitation: Converting records requires an explicit type argument to `to` method representing the target case class")
 
     val typeClass =
       new ConversionMacros[c.type](c).convertRecordMaterializer(fromTpe, toTpe)
 
     c.Expr[To](q"""$typeClass.convert(${c.prefix.tree}.record)""")
+  }
+
+  def plus_impl[From <: Rec: c.WeakTypeTag](c: Context)(fields: c.Expr[(String, Any)]*) = {
+    new ConversionMacros[c.type](c).plusOperation[From](fields: _*)
   }
 
   class ConversionMacros[C <: Context](override val c: C)
@@ -58,6 +62,31 @@ object RecordConversions {
         case l =>
           c.abort(NoPosition, s"There are ${l.size} implicit candidates found. There should be only 1.")
       }
+    }
+
+    def plusOperation[From <: Rec: c.WeakTypeTag](fields: c.Expr[(String, Any)]*) = {
+      val newFields = fields.map(_.tree).map(fieldsToTuples).map {
+        case (s, v) => (s, v, v.tpe.widen)
+      }
+      val newSchema = newFields.map { case (name, _, tpe) => (name, tpe) }
+      checkDuplicate(newSchema)
+
+      // check if the field already exists
+      val existingSchema: Seq[(String, Type)] = recordFields(c.weakTypeTag[From].tpe)
+      val intersection = (existingSchema.map(_._1) intersect newSchema.map(_._1)).toSet
+      if (intersection.size > 0) {
+        val fieldsString =
+          existingSchema.toMap.filterKeys(intersection).map(f => s"${f._1}: ${f._2}").mkString("[", ",", "]")
+        c.abort(NoPosition, s"Fields $fieldsString can not be added as they already exist.")
+      }
+
+      val existingFields = existingSchema.map {
+        case (nme: String, tpe) =>
+          (nme, q"${c.prefix.tree}.record.${TermName(nme)}", tpe)
+      }
+
+      val resTree = newRecord(existingFields ++ newFields)
+      c.Expr(resTree)
     }
 
     def convertRecordMaterializer(fromType: Type, toType: Type, path: List[String] = Nil): Tree =
@@ -128,8 +157,8 @@ object RecordConversions {
       params map (param => (param.name.encoded, param.typeSignature))
     }
 
-    def recordFields(recType: Type) = for {
-      mem <- recType.members
+    def recordFields(recType: Type): Seq[(String, Type)] = for {
+      mem <- recType.members.toSeq
       if mem.isMacro && mem.isMethod
     } yield (mem.name.encoded, mem.asMethod.returnType)
 

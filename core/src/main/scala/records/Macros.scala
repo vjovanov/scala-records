@@ -359,43 +359,39 @@ object Macros {
     }
 
     /**
+     * A helper for parsing field parameters.
+     * NOTE: This helper reports context insensitive error messages so it can be used with any operation.
+     */
+    def fieldsToTuples(arg: Tree): (String, Tree) = arg match {
+      case RecordField(s: String, v) =>
+        (s, v)
+      case RecordField(_, _) =>
+        c.abort(NoPosition, "Field names can only be non-empty string literals (e.g., \"fName\".")
+      case _ =>
+        c.abort(NoPosition, "Record fields can only be represented with tuples (a, b) and arrows a -> b.")
+    }
+
+    /**
      * Macro that implements [[Rec.applyDynamic]] and [[Rec.applyDynamicNamed]].
      * You probably won't need this.
      */
     def recordApply(v: Seq[c.Expr[(String, Any)]]): c.Expr[Rec] = {
-      val constantLiteralsMsg =
-        "Records can only be constructed with constant keys (string literals)."
-      val noEmptyStrMsg =
-        "Records may not have a field with an empty name"
-
-      val tuples = v.map(_.tree).map {
-        case Tuple2(Literal(Constant(s: String)), v) =>
-          if (s == "") c.abort(NoPosition, noEmptyStrMsg)
-          else (s, v)
-        case Literal(Constant(s: String)) -> v =>
-          if (s == "") c.abort(NoPosition, noEmptyStrMsg)
-          else (s, v)
-        case Tuple2(_, _) =>
-          c.abort(NoPosition, constantLiteralsMsg)
-        case _ -> _ =>
-          c.abort(NoPosition, constantLiteralsMsg)
-        case x =>
-          c.abort(NoPosition, "Records can only be constructed with tuples (a, b) and arrows a -> b.")
+      val fields = v.map(_.tree).map(fieldsToTuples).map {
+        case (name, tree) => (name, tree, tree.tpe.widen)
       }
 
-      val schema = tuples.map { case (s, v) => (s, v.tpe.widen) }
+      c.Expr[Rec](newRecord(fields))
+    }
 
+    protected[records] def newRecord(fields: Seq[(String, Tree, Type)]) = {
+      val schema = fields.map { case (s, _, tp) => (s, tp) }
       checkDuplicate(schema)
-
-      val args = tuples.map { case (s, v) => q"($s,$v)" }
+      val args = fields.map { case (s, v, _) => q"($s,$v)" }
       val data = q"Map[String,Any](..$args)"
 
-      val resultTree =
-        record(schema)()(
-          q"private val _data = $data")(
-            q"_data(fieldName).asInstanceOf[T]")
-
-      c.Expr[Rec](resultTree)
+      record(schema)()(
+        q"private val _data = $data")(
+          q"_data(fieldName).asInstanceOf[T]")
     }
 
     /** Generate a specialized data access on a record */
@@ -424,7 +420,7 @@ object Macros {
       }
     }
 
-    private def checkDuplicate(schema: Seq[(String, c.Type)]): Unit = {
+    protected[records] def checkDuplicate(schema: Seq[(String, c.Type)]): Unit = {
       val duplicateFields = schema.groupBy(_._1).filter(_._2.size > 1)
       if (duplicateFields.nonEmpty) {
         val fields = duplicateFields.keys.toList.sorted
@@ -432,6 +428,21 @@ object Macros {
           c.abort(NoPosition, s"Field ${fields.head} is defined more than once.")
         else
           c.abort(NoPosition, s"Fields ${fields.mkString(", ")} are defined more than once.")
+      }
+    }
+
+    object RecordField {
+      val noEmptyStrMsg = "Records may not have a field with an empty name."
+      def unapply(tree: Tree): Option[(Any, Tree)] = tree match {
+        case Tuple2(Literal(Constant("")), v) =>
+          c.abort(NoPosition, noEmptyStrMsg)
+        case Literal(Constant("")) -> v =>
+          c.abort(NoPosition, noEmptyStrMsg)
+        case Tuple2(Literal(Constant(s)), v) =>
+          Some((s, v))
+        case Literal(Constant(s)) -> v =>
+          Some((s, v))
+        case _ => None
       }
     }
 

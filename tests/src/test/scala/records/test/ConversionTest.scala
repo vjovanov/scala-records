@@ -40,7 +40,7 @@ class ConversionTests extends FlatSpec with Matchers {
     case class ToHolder(to: String)
 
     record.to should be("R")
-    new Rec.Convert(record).to[ToHolder] should be(ToHolder("R"))
+    new Rec.Ops(record).to[ToHolder] should be(ToHolder("R"))
   }
 
   import records.RecordConversions._
