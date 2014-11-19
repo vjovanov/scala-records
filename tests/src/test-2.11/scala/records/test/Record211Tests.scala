@@ -79,4 +79,36 @@ class Record211Tests extends FlatSpec with Matchers {
     assert(!set.contains(Rec("a" -> 7, "b" -> 10)))
   }
 
+  import org.scala_lang.virtualized._
+  trait Struct
+
+  case class Const[T](x: T) extends Rep[T] {
+    val fields = Nil
+  }
+  case class IntConst(x: Int) extends Rep[Int] {
+   val fields = Nil
+  }
+  implicit def unit[T](x: T): Rep[T] = Const(x)
+  def newStruct[T](v: (String, Rep[Any])*): Rep[T] = {
+    new Rep[T]{
+      val fields: List[(String, Rep[Any])] = v.toList
+      override def equals(x: Any): Boolean = {
+        x.isInstanceOf[Rep[T]] && x.asInstanceOf[Rep[T]].fields == fields
+      }
+    }
+  }
+
+  it should "work with basic rep and non-rep types" in {
+    val res: Rep[Struct{ val name: String; val age: Int }] =
+      Record(name = "Hannah", age = Const(30))
+    res.fields should be(List(("name", Const("Hannah")), ("age", Const(30))))
+    // res.name should be ("Hannah")
+  }
+
+  it should "support nested records" in {
+    val res: Rep[Struct{ val name: String; val age: Int; val country: Struct {val name: String} }] =
+      Record(name = Const("Hannah"), age = 30, country = Record(name = "US"))
+    res.fields should be(List(("name", Const("Hannah")), ("age", Const(30)), ("country", Record(name = "US"))))
+  }
+
 }
