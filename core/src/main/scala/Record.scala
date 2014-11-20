@@ -8,6 +8,10 @@ import scala.language.dynamics
 trait Rep[+T] {
   val fields: List[(String, Any)]
 }
+trait Struct
+trait Convert[From, To] {
+  def convert(v: From): To
+}
 
 object RecordMacros {
 
@@ -57,7 +61,7 @@ object RecordMacros {
     val schema = tuples.map {
       case (s, v) =>
         val widened = v.tpe.widen
-        val tpe = if (widened <:< c.typeOf[Rep[_]]) widened.baseType(classOf[Rep[_]].symbol).dealias match {
+        val tpe = if (widened <:< c.typeOf[Rep[_]]) widened.dealias match {
           case TypeRef(_, _, arg :: Nil) =>
             arg
         }
@@ -85,6 +89,23 @@ object RecordMacros {
     val tpTree = tq"Struct { ..$vals }"
     c.Expr(q"newStruct[$tpTree](..${tuples.map(x => q"(${x._1}, ${x._2})")})")
   }
+
+  def materializeImpl[A: c.WeakTypeTag, B: c.WeakTypeTag](c: Context): c.Expr[Convert[Rep[A], B]] = {
+    import c.universe._
+    import compat._
+
+    val srcMembers = c.weakTypeTag[A].tpe.members.collect { case x: MethodSymbol if x.isStable => x }
+    val dstTpeMembers = srcMembers.map(x => q"""def ${x.name}: Rep[${x.returnType}]""")
+    val dstMembers = srcMembers.map(x => q"""def ${x.name}: Rep[${x.returnType}] = ???""")
+    println(c.weakTypeTag[A])
+    println(dstTpeMembers)
+    c.Expr(q"""new Convert[Rep[${weakTypeOf[A]}],{..$dstTpeMembers}]{
+      def convert(rec: Rep[${weakTypeOf[A]}]): {..$dstTpeMembers} = new {
+        ..$dstMembers
+      }
+    }""")
+  }
+
 }
 
 object Record extends Dynamic {
@@ -97,5 +118,11 @@ object Record extends Dynamic {
    * }}}
    */
   def applyDynamicNamed(method: String)(v: (String, Any)*): Any = macro RecordMacros.apply_impl
+
+  implicit def materialize[A <: Struct, B]: Convert[Rep[A], B] = macro RecordMacros.materializeImpl[A, B]
+
+  implicit def convert[A <: Struct, B](rec: Rep[A])(implicit ev: Convert[Rep[A], B]): B =
+    ev.convert(rec)
+
 }
 

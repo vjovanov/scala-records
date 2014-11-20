@@ -80,7 +80,7 @@ class Record211Tests extends FlatSpec with Matchers {
   }
 
   import org.scala_lang.virtualized._
-  trait Struct
+  import org.scala_lang.virtualized.Record._
 
   case class Const[T](x: T) extends Rep[T] {
     val fields = Nil
@@ -99,10 +99,11 @@ class Record211Tests extends FlatSpec with Matchers {
   }
 
   it should "work with basic rep and non-rep types" in {
-    val res: Rep[Struct{ val name: String; val age: Int }] =
+    type Person = Struct{ val name: String; val age: Int }
+    val res: Rep[Person] =
       Record(name = "Hannah", age = Const(30))
     res.fields should be(List(("name", Const("Hannah")), ("age", Const(30))))
-    // res.name should be ("Hannah")
+    convert(res).name should be ("Hannah")
   }
 
   it should "support nested records" in {
