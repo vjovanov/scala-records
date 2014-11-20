@@ -96,9 +96,9 @@ object RecordMacros {
 
     val srcMembers = c.weakTypeTag[A].tpe.members.collect { case x: MethodSymbol if x.isStable => x }
     val dstTpeMembers = srcMembers.map(x => q"""def ${x.name}: Rep[${x.returnType}]""")
-    val dstMembers = srcMembers.map(x => q"""def ${x.name}: Rep[${x.returnType}] = ???""")
-    println(c.weakTypeTag[A])
-    println(dstTpeMembers)
+    val dstMembers =
+      srcMembers.map(x => q"""def ${x.name}: Rep[${x.returnType}] = field[${x.returnType}](rec, ${x.name.toString})""")
+
     c.Expr(q"""new Convert[Rep[${weakTypeOf[A]}],{..$dstTpeMembers}]{
       def convert(rec: Rep[${weakTypeOf[A]}]): {..$dstTpeMembers} = new {
         ..$dstMembers
